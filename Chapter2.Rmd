@@ -1,0 +1,237 @@
+---
+title: "Chapter2_Practice"
+author: "Zhang Chen"
+date: "7/12/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-------
+
+# Easy
+
+## 2E1
+
+3 and 4
+
+## 2E2
+
+3
+
+## 2E3
+
+1 and 4
+
+-------
+
+# Medium
+
+## 2M1
+
+```{r 2M1}
+# Define grid and prior
+p_grid <- seq(from=0, to=1, length.out = 100)
+prior  <- rep(1, 100)
+
+# W, W, W
+likelihood1    <- dbinom(3, size=3, prob=p_grid)
+posterior_raw1 <- prior * likelihood1
+posterior1     <- posterior_raw1/sum(posterior_raw1)
+
+# W, W, W, L
+likelihood2    <- dbinom(3, size=4, prob=p_grid)
+posterior_raw2 <- prior * likelihood2
+posterior2     <- posterior_raw2/sum(posterior_raw2)
+
+# L, W, W, L, W, W, W
+likelihood3    <- dbinom(5, size=7, prob=p_grid)
+posterior_raw3 <- prior * likelihood3
+posterior3     <- posterior_raw3/sum(posterior_raw3)
+
+# Plot posterior distributions
+plot(p_grid, posterior1, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="W, W, W")
+
+plot(p_grid, posterior2, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="W, W, W, L")
+
+plot(p_grid, posterior3, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="L, W, W, L, W, W, W")
+```
+
+## 2M2
+
+```{r 2M2}
+# Define grid and prior
+p_grid <- seq(from=0, to=1, length.out = 100)
+prior  <- ifelse(p_grid<0.5, 0, 1)
+
+# W, W, W
+likelihood1    <- dbinom(3, size=3, prob=p_grid)
+posterior_raw1 <- prior * likelihood1
+posterior1     <- posterior_raw1/sum(posterior_raw1)
+
+# W, W, W, L
+likelihood2    <- dbinom(3, size=4, prob=p_grid)
+posterior_raw2 <- prior * likelihood2
+posterior2     <- posterior_raw2/sum(posterior_raw2)
+
+# L, W, W, L, W, W, W
+likelihood3    <- dbinom(5, size=7, prob=p_grid)
+posterior_raw3 <- prior * likelihood3
+posterior3     <- posterior_raw3/sum(posterior_raw3)
+
+# Plot posterior distributions
+plot(p_grid, posterior1, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="W, W, W")
+
+plot(p_grid, posterior2, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="W, W, W, L")
+
+plot(p_grid, posterior3, type="l", 
+     xlab="Probability of Water", ylab="Posterior Density", main="L, W, W, L, W, W, W")
+```
+
+## 2M3
+
+```{r 2M3}
+# Prior probabilities of selecting Earth and Mars
+Pr_Earth <- 0.5
+Pr_Mars  <- 0.5
+
+# Likelihood of observing land for Earth and Mars
+Pr_land_Earth <- 0.3
+Pr_land_Mars  <- 1.0
+
+# Average (marginal) likelihood of observing land
+Pr_land <- Pr_Earth*Pr_land_Earth + Pr_Mars*Pr_land_Mars
+
+# Apply Bayes' theorem
+(Pr_Earth_land <- Pr_Earth * Pr_land_Earth/Pr_land)
+```
+
+## 2M4
+
+```{r 2M4}
+# Counting method
+# Card with two white sides - 0 way
+card1_ways = 0
+
+# Card with one white and one black side - 1 way (black side up, white side down)
+card2_ways = 1
+
+# Card with two black sides - 2 ways
+card3_ways = 2
+
+# probability the other side is black
+(card3_ways/(card3_ways+card2_ways))
+
+```
+
+## 2M5
+
+```{r 2M5}
+# Another card with two black sides - 2 ways
+card4_ways = 2
+
+# probability the other side is black
+((card3_ways + card4_ways)/(card2_ways + card3_ways + card4_ways))
+```
+
+## 2M6
+
+```{r 2M6}
+# Add prior number of ways
+(card3_ways*1/(card3_ways*1+card2_ways*2+card1_ways*3))
+```
+
+## 2M7
+
+```{r 2M7}
+# Possibility 1: B/B, B/W
+pos1_ways <- 2*1
+
+# Possibility 2: B/B, W/W
+pos2_ways <- 2*2
+
+# Possibility 3: B/W, B/B
+pos3_ways <- 1*0
+
+# Possibility 4: B/W, W/W
+pos4_ways <- 1*2
+
+# Possibility 5: W/W, B/B
+pos5_ways <- 0*0
+
+# Possibility 6: W/W, B/W
+pos6_ways <- 0*1
+
+# For possibilities 1 and 2, the other side of the first card is also black
+((pos1_ways+pos2_ways)/(pos1_ways+pos2_ways+pos3_ways+pos4_ways+pos5_ways+pos6_ways))
+
+```
+
+-------
+
+# Hard
+
+## 2H1
+
+```{r 2H1}
+# Prior probabilities of having panda A or B
+prior_panda <- c(0.5, 0.5)
+
+# Likelihood of pandas A and B giving birth to twins
+likelihood_T <- c(0.1, 0.2)
+
+# posterior after first birth (twins)
+posterior_panda <- prior_panda*likelihood_T
+posterior_panda <- posterior_panda/sum(posterior_panda)
+
+# Probability of giving birth to twins again
+(sum(posterior_panda*likelihood_T))
+```
+
+## 2H2
+
+```{r 2H2}
+(posterior_panda[1])
+```
+
+## 2H3
+
+```{r 2H3}
+# Likelihood of giving birth to singletons
+likelihood_S <- c(0.9, 0.8)
+
+# Posterior after observing the second birth to be singletion
+posterior_panda2 <- posterior_panda*likelihood_S
+posterior_panda2 <- posterior_panda2/(sum(posterior_panda2))
+
+# Posterior probability of the panda being species A
+(posterior_panda2[1])
+```
+
+## 2H4
+
+```{r 2H4}
+# First ingore birth data
+# Likelihood of identifying a panda as species A, given that it's A or B
+likelihood_A <- c(0.8, 0.35)
+
+posterior_noBirth <- prior_panda*likelihood_A
+posterior_noBirth <- posterior_noBirth/sum(posterior_noBirth)
+
+(posterior_noBirth[1])
+
+
+# Take birth data into account
+posterior_Birth <- posterior_panda2*likelihood_A
+posterior_Birth <- posterior_Birth/sum(posterior_Birth)
+
+(posterior_Birth[1])
+```
+
