@@ -1,0 +1,190 @@
+---
+title: "Chapter3_Practice"
+author: "Zhang Chen"
+date: "7/12/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-------
+
+# Easy
+
+```{r Easy}
+library(rethinking)
+
+p_grid <- seq(from=0, to=1, length.out = 1000)
+prior  <- rep(1, 1000)
+likelihood <- dbinom(6, size=9, prob=p_grid)
+posterior  <- prior*likelihood
+posterior  <- posterior/sum(posterior)
+set.seed(100)
+samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+
+# 3E1
+(mean(samples < 0.2))
+
+# 3E2
+(mean(samples > 0.8))
+
+# 3E3
+(mean(samples <= 0.8 & samples >= 0.2))
+
+# 3E4
+(quantile(samples, probs=0.2))
+
+# 3E5
+(quantile(samples, probs=0.8))
+
+# 3E6
+(HPDI(samples, prob=0.66))
+
+# 3e7
+(PI(samples, prob=0.66))
+```
+
+-------
+
+# Medium
+
+## 3M1
+
+```{r 3M1}
+likelihood <- dbinom(8, size=15, prob=p_grid)
+posterior  <- prior*likelihood
+posterior  <- posterior/sum(posterior)
+
+plot(p_grid, posterior, type="l", main="8 Waters in 15 Tosses",
+     xlab="Probability of Water", ylab="Posterior Density")
+```
+
+## 3M2
+
+```{r 3M2}
+samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+(HPDI(samples, prob=0.9))
+```
+
+## 3M3
+
+```{r 3m3}
+simulatedTosses <- rbinom(n=1e4, size=15, prob=samples)
+simplehist(simulatedTosses)
+
+# Probability of observing 8 waters in 15 tosses
+(mean(simulatedTosses == 8))
+```
+
+## 3M4
+
+```{r 3m4}
+simulatedTosses <- rbinom(n=1e4, size=9, prob=samples)
+simplehist(simulatedTosses)
+
+# Probability of observing 6 waters in 9 tosses
+(mean(simulatedTosses == 6))
+```
+
+## 3M5
+
+```{r 3M5}
+# new prior
+prior <- ifelse(p_grid<0.5, 0, 1)
+
+likelihood <- dbinom(8, size=15, prob=p_grid)
+posterior  <- prior*likelihood
+posterior  <- posterior/sum(posterior)
+
+plot(p_grid, posterior, type="l", main="8 Waters in 15 Tosses (New Prior)",
+     xlab="Probability of Water", ylab="Posterior Density")
+
+# 90% HPDI
+samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+(HPDI(samples, prob=0.9))
+
+# Probability of observing 8 waters in 15 tosses
+simulatedTosses <- rbinom(n=1e4, size=15, prob=samples)
+simplehist(simulatedTosses)
+
+(mean(simulatedTosses == 8))
+
+# Probability of observing 6 waters in 9 tosses
+simulatedTosses <- rbinom(n=1e4, size=9, prob=samples)
+simplehist(simulatedTosses)
+
+(mean(simulatedTosses == 6))
+```
+
+-------
+
+# Hard
+
+## 3H1
+
+```{r 3H1}
+data(homeworkch3)
+
+# Calculate number of total births and number of boys
+N_total <- length(birth1)+length(birth2)
+N_boy   <- sum(birth1)+sum(birth2)
+
+# grid approximation
+p_grid <- seq(from=0, to=1, length.out=1000)
+prior  <- rep(1, 1000) #assume a uniform prior distribution
+
+likelihood <- dbinom(x=N_boy, size=N_total, prob=p_grid)
+
+posterior <- prior*likelihood
+posterior <- posterior/sum(posterior)
+
+plot(p_grid, posterior, type="l", xlab="Probability of Boy", ylab="Posterior Density")
+```
+
+## 3H2
+
+```{r 3H2}
+samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+
+HPDI(samples, prob=0.5)
+HPDI(samples, prob=0.89)
+HPDI(samples, prob=0.97)
+```
+
+## 3H3
+
+```{r 3H3}
+simulated_birth <- rbinom(1e4, size=N_total, prob=samples)
+
+dens(simulated_birth)
+abline(v = N_boy)
+```
+
+## 3H4
+
+```{r 3H4}
+# data from first brith
+N_total1 <- length(birth1)
+N_boy1   <- sum(birth1)
+
+simulated_birth1 <- rbinom(1e4, size=N_total1, prob=samples)
+
+dens(simulated_birth1)
+abline(v = N_boy1)
+```
+
+## 3H5
+
+```{r 3H5}
+# Prepare data
+N_girl1 <- sum(birth1 == 0) # number of girls in first born
+N_girl1_boy2 <- sum(birth2[birth1==0]) # number of boys following a girl
+
+simulated_birth <- rbinom(1e4, size=N_girl1, prob=samples)
+
+dens(simulated_birth)
+abline(v = N_girl1_boy2)
+```
+
