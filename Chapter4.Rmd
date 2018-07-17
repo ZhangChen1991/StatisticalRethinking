@@ -1,0 +1,234 @@
+---
+title: "Chapter4_Practice"
+author: "Zhang Chen"
+date: "7/17/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-------
+
+# Easy
+
+## 4E1
+
+the first line
+
+## 4E2
+
+two
+
+## 4E4
+
+the second line
+
+## 4E5
+
+three
+
+-------
+
+# Medium
+
+## 4M1
+
+```{r 4M1}
+library(rethinking)
+
+sim.mu <- rnorm(1e4, mean=0, sd=10)
+sim.sigma <- runif(1e4, min=0, max=10)
+sim.height <- rnorm(1e4, mean=sim.mu, sd=sim.sigma)
+
+dens(sim.height)
+```
+
+## 4M2
+
+```{r 4M2}
+flist <- alist(
+  height ~ dnorm(mu, sigma),
+  mu ~ dnorm(0, 10),
+  sigma ~ dunif(0, 10)
+)
+```
+
+## 4M3
+
+height[i] ~ Normal(mu[i], sigma)
+
+mu[i] <- a + b*x[i]
+
+a ~ Normal(0, 50)
+
+b ~ Uniform(0, 10)
+
+sigma ~ Uniform(0, 50)
+
+## 4M4
+
+height ~ Normal(average height, sigma)
+
+average height <- a + b*year
+
+a ~ Normal(180, 100)
+
+b ~ Normal(0, 10)
+
+sigma ~ dunif(0, 100)
+
+## 4M5
+
+Knowing that the average height of the students in the first year was 120 cm, there is no uncertainty in the parameter a anymore. So the linear model will become average height <- 120 + b*year.
+
+Knowing that every student got taller each year, the parameter b has to be positive. A half-Normal distribution on b can be used as the prior.
+
+## 4M6
+
+With this new information, the prior on sigma will become an uniform distribution from 0 to 64.
+
+-------
+
+# Hard
+
+## 4H1
+
+```{r 4H1}
+data("Howell1")
+d <- Howell1
+
+# plot raw data
+plot(height ~ weight, data=d)
+
+# fit a polynomial regression
+d$weight.s  <- scale(d$weight)
+d$weight.s2 <- d$weight.s^2
+
+m.4h1 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*weight.s+b2*weight.s2,
+    a ~ dnorm(178, 100),
+    b1 ~ dnorm(0, 20),
+    b2 ~ dnorm(0, 20),
+    sigma ~ dunif(0, 50)
+  ),
+  data = d)
+
+precis(m.4h1, corr=TRUE)
+
+# plot results
+weight.seq <- seq(from=min(d$weight.s), to=max(d$weight.s), length.out=40)
+pred_data  <- list(weight.s=weight.seq, weight.s2=weight.seq^2)
+
+mu <- link(m.4h1, data=pred_data)
+mu.mean <- apply(mu, 2, mean)
+mu.PI   <- apply(mu, 2, PI, prob=0.89)
+
+sim.heights <- sim(m.4h1, data=pred_data)
+heights.PI  <- apply(sim.heights, 2, PI, prob=0.89)
+
+plot(height ~ weight.s, data=d)
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq, col="black")
+shade(heights.PI, weight.seq)
+
+# make predictions for the five individuals with missing height
+weight.obs <- c(46.95, 43.72, 64.78, 32.59, 54.63)
+weight.obs <- (weight.obs-mean(d$weight))/sd(d$weight)
+
+pred_data <- list(weight.s=weight.obs, weight.s2=weight.obs^2)
+heights.pred <- sim(m.4h1, data=pred_data)
+
+heights.mean <- apply(heights.pred, 2, mean)
+heights.PI   <- apply(heights.pred, 2, PI, prob=0.89)
+
+# plot results
+plot(height ~ weight.s, data=d, xaxt="n", xlab="Weight", ylab="Height")
+at <- c(-2, -1, 0, 1, 2)
+labels <- at*sd(d$weight)+mean(d$weight)
+axis(side=1, at=at, labels=round(labels, 1))
+
+points(x=weight.obs, y=heights.mean, col="blue", pch=16)
+arrows(weight.obs, heights.PI[1,], weight.obs, heights.PI[2,], 
+       length=0.05, angle=90, code=3, col="blue")
+
+```
+
+## 4H2
+
+```{r 4H2}
+d2 <- d[d$age < 18, ]
+
+m.4h2 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b*weight,
+    a ~ dnorm(100, 100),
+    b ~ dnorm(0, 20),
+    sigma ~ dunif(0, 50)
+  ),
+  data=d2)
+
+precis(m.4h2, corr=TRUE)
+
+# Plot results
+weight.seq <- seq(from=min(d2$weight), to=max(d2$weight), length.out=40)
+pred_data  <- list(weight=weight.seq)
+
+mu <- link(m.4h2, data=pred_data)
+mu.mean <- apply(mu, 2, mean)
+mu.PI   <- apply(mu, 2, PI, prob=0.89)
+
+sim.heights <- sim(m.4h2, data=pred_data)
+height.PI   <- apply(sim.heights, 2, PI, prob=0.89)
+
+plot(height ~ weight, data=d2)
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+
+```
+
+The relationship between weight and height does not seem to be linear. The model tends to make predictions that are above observed heights at the two extreme ends of weight; when weight is in the middle range (from 15 till around 30), the predictions of the model are consistently lower than the observed heights.
+
+## 4H3
+
+```{r 4H3}
+d$weight.log <- log(d$weight)
+
+# plot raw data points
+plot(height ~ weight.log, data=d)
+
+# fit a linear regression model
+m.4h3 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b*weight.log,
+    a ~ dnorm(178, 100),
+    b ~ dnorm(0, 100),
+    sigma ~ dunif(0, 50)
+  ),
+  data=d)
+
+precis(m.4h3, corr=TRUE)
+
+# plot results
+weight.seq <- seq(from=min(d$weight), to=max(d$weight),length.out=100)
+weight.log.seq <- log(weight.seq)
+
+pred_data <- list(weight.log=weight.log.seq)
+mu <- link(m.4h3, data=pred_data)
+mu.mean <- apply(mu, 2, mean)
+mu.HPDI <- apply(mu, 2, HPDI, prob=0.97)
+
+sim.heights <- sim(m.4h3, data=pred_data)
+height.HPDI <- apply(sim.heights, 2, HPDI, prob=0.97)
+
+plot(height ~ weight, data=d, col=col.alpha(rangi2, 0.4))
+lines(weight.seq, mu.mean)
+shade(mu.HPDI, weight.seq, col=col.alpha("black", alpha=0.4))
+shade(height.HPDI, weight.seq)
+```
