@@ -1,0 +1,397 @@
+---
+title: "Chapter6"
+author: "Zhang Chen"
+date: "7/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,message=FALSE}
+library(rethinking)
+```
+
+-----
+
+# Easy
+
+## 6E1
+
+(1) The measure of uncertainty should be continuous.
+
+(2) As the number of possible outcomes increases, the measure of uncertainty should increase as well.
+
+(3) The measure of uncertainty should be additive.
+
+## 6E2-6E4
+
+```{r 6E2-6E4}
+# 6E2
+p <- c(0.7, 0.3)
+(H <- sum(-p*log(p)))
+
+# 6E3
+p <- c(0.2, 0.25, 0.25, 0.3)
+(H <- sum(-p*log(p)))
+
+# 6E4
+p <- c(1/3, 1/3, 1/3)
+(H <- sum(-p*log(p)))
+```
+
+-----
+
+# Medium
+
+## 6M1
+
+WAIC is most general. From WAIC to DIC: the posterior distribution needs to be multivariate Gaussian; from DIC to AIC: the prior needs to be flat or overwhelmed by the likelihood.
+
+## 6M2
+
+*model selection* selects one best model according to some criteria.
+*model averaging* retains all the models considered and averages the predictions of all models.
+Under model selection, information about models that are worse than the best model is lost. Model averaging retains all information. For the sepecific parameters used in each model, one still needs to look into each model. Model averaging does NOT average over parameters!
+
+## 6M3
+
+Models fit to a smaller number of observations will have smaller information criteria values.
+
+```{r 6M3}
+# simulate data
+set.seed(100)
+a.sim <- 10
+b.sim <- 5
+sigma.sim <- 4
+
+x <- runif(20, min=-5, max=5)
+y <- rnorm(20, mean=x*b.sim+a.sim, sd=sigma.sim)
+d <- data.frame(x=x, y=y)
+plot(y ~ x, d, col=rangi2)
+
+d2 <- d[1:10, ] #select the first 10 cases
+
+# fit model with 20 observations
+m1 <- map(
+  alist(
+    y  ~ dnorm(mu, sigma),
+    mu <- a+b*x
+  ),
+  data=d,
+  start=list(a=a.sim, b=b.sim, sigma=sigma.sim)
+)
+
+WAIC(m1)
+
+# fit model with 10 observations
+m2 <- map(
+  alist(
+    y  ~ dnorm(mu, sigma),
+    mu <- a+b*x
+  ),
+  data=d2,
+  start=list(a=a.sim, b=b.sim, sigma=sigma.sim)
+)
+
+WAIC(m2)
+```
+
+## 6M4
+
+The effective number of parameters become smaller then prior becomes more concentrated ???
+
+```{r 6M4}
+m3 <- map(
+  alist(
+    y  ~ dnorm(mu, sigma),
+    mu <- a+b*x,
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 1),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d,
+  start=list(a=a.sim, b=b.sim, sigma=sigma.sim)
+)
+
+WAIC(m3)
+```
+
+## 6M5
+
+Informative priors make the model skeptical about the data, and therefore it learns less (is not completely determined by the sample at hand). Hence overfitting is reduced.
+
+## 6M6
+
+Overly informative priors make the model insensitive to data, therefore the model does not learn the regularities from data (i.e., underfitting).
+
+------
+
+# Hard
+
+## 6H1
+
+```{r 6H1}
+data("Howell1")
+d <- Howell1
+d$age <- scale(d$age)
+
+set.seed(1000)
+i <- sample(1:nrow(d), size=nrow(d)/2)
+
+d1 <- d[i, ]
+d2 <- d[-i, ]
+
+a.start = mean(d1$height)
+sigma.start = sd(d1$height)
+
+m1 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age,
+    a ~ dnorm(180, 100),
+    b1 ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, sigma=sigma.start)
+)
+
+m2 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2),
+    a ~ dnorm(180, 100),
+    b1 ~ dnorm(0, 10),
+    b2 ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, sigma=sigma.start)
+
+)
+
+m3 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2)+b3*(age^3),
+    a ~ dnorm(180, 100),
+    c(b1, b2, b3) ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, b3=0, sigma=sigma.start)
+
+)
+
+m4 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2)+b3*(age^3)+b4*(age^4),
+    a ~ dnorm(180, 100),
+    c(b1, b2, b3, b4) ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, b3=0, b4=0, sigma=sigma.start)
+)
+
+m5 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2)+b3*(age^3)+b4*(age^4)+b5*(age^5),
+    a ~ dnorm(180, 100),
+    c(b1, b2, b3, b4, b5) ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, b3=0, b4=0, b5=0, sigma=sigma.start)
+)
+
+m6 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2)+b3*(age^3)+b4*(age^4)+b5*(age^5)+b6*(age^6),
+    a ~ dnorm(180, 100),
+    c(b1, b2, b3, b4, b5, b6) ~ dnorm(0, 10),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0, sigma=sigma.start)
+)
+
+WAIC.m1 <- WAIC(m1)
+WAIC.m2 <- WAIC(m2)
+WAIC.m3 <- WAIC(m3)
+WAIC.m4 <- WAIC(m4)
+WAIC.m5 <- WAIC(m5)
+WAIC.m6 <- WAIC(m6)
+
+compare(m1, m2, m3, m4, m5, m6)
+
+```
+
+## 6H2
+
+```{r 6H2}
+plotPrediction <- function(model, title){
+  
+  age.seq <- seq(from=-2, to=3, length.out=100)
+  
+  mu <- link(model, data=data.frame(age=age.seq))
+  mu.mean <- apply(mu, 2, mean)
+  mu.PI   <- apply(mu, 2, PI, prob=0.97)
+  
+  height.sim <- sim(model, data=data.frame(age=age.seq))
+  height.PI  <- apply(height.sim, 2, PI, prob=0.97)
+  
+  plot(height ~ age, data=d1, col=rangi2, main=title)
+  
+  lines(age.seq, mu.mean)
+  lines(age.seq, mu.PI[1, ], lty=2)
+  lines(age.seq, mu.PI[2, ], lty=2)
+  
+  shade(height.PI, age.seq)
+  
+}
+
+plotPrediction(m1, "Model 1")
+plotPrediction(m2, "Model 2")
+plotPrediction(m3, "Model 3")
+plotPrediction(m4, "Model 4")
+plotPrediction(m5, "Model 5")
+plotPrediction(m6, "Model 6")
+
+```
+
+## 6H3
+
+```{r 6H3}
+age.seq <- seq(from=-2, to=3, length.out=100)
+m.ensemble <- ensemble(m1, m2, m3, m4, m5, m6, data=data.frame(age=age.seq))
+
+mu.mean <- apply(m.ensemble$link, 2, mean)
+mu.PI   <- apply(m.ensemble$link, 2, PI, prob=0.97)
+
+height.PI <- apply(m.ensemble$sim, 2, PI, prob=0.97)
+
+plot(height ~ age, data=d1, col=rangi2, main="Model Averaging")
+
+lines(age.seq, mu.mean)
+lines(age.seq, mu.PI[1, ], lty=2)
+lines(age.seq, mu.PI[2, ], lty=2)
+  
+shade(height.PI, age.seq)
+```
+
+## 6H4
+
+```{r 6H4}
+dev.m1 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m1)[1] + coef(m1)[2]*d2$age,
+                    sd = coef(m1)[3],
+                    log=TRUE))
+
+dev.m2 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m2)[1] + coef(m2)[2]*d2$age + coef(m2)[3]*(d2$age^2),
+                    sd = coef(m2)[4],
+                    log=TRUE))
+
+dev.m3 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m3)[1] + coef(m3)[2]*d2$age + coef(m3)[3]*(d2$age^2) +
+                      coef(m3)[4]*(d2$age^3),
+                    sd = coef(m3)[5],
+                    log=TRUE))
+
+dev.m4 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m4)[1] + coef(m4)[2]*d2$age + coef(m4)[3]*(d2$age^2) +
+                      coef(m4)[4]*(d2$age^3)+coef(m4)[5]*(d2$age^4),
+                    sd = coef(m4)[6],
+                    log=TRUE))
+
+dev.m5 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m5)[1] + coef(m5)[2]*d2$age + coef(m5)[3]*(d2$age^2) +
+                      coef(m5)[4]*(d2$age^3)+coef(m5)[5]*(d2$age^4)+coef(m5)[6]*(d2$age^5),
+                    sd = coef(m5)[7],
+                    log=TRUE))
+
+dev.m6 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m6)[1] + coef(m6)[2]*d2$age + coef(m6)[3]*(d2$age^2) +
+                      coef(m6)[4]*(d2$age^3)+coef(m6)[5]*(d2$age^4)+coef(m6)[6]*(d2$age^5)+
+                      coef(m6)[7]*(d2$age^6),
+                    sd = coef(m6)[8],
+                    log=TRUE))
+```
+
+## 6H5
+
+```{r 6H5}
+
+(c(dev.m1, dev.m2, dev.m3, dev.m4, dev.m5, dev.m6) - 
+    min(dev.m1, dev.m2, dev.m3, dev.m4, dev.m5, dev.m6))
+
+(c(WAIC.m1, WAIC.m2, WAIC.m3, WAIC.m4, WAIC.m5, WAIC.m6)-
+    min(WAIC.m1, WAIC.m2, WAIC.m3, WAIC.m4, WAIC.m5, WAIC.m6))
+
+# plot predictions of models against observations in d2
+plotPrediction2 <- function(model, title){
+  
+  age.seq <- seq(from=-2, to=3, length.out=100)
+  
+  mu <- link(model, data=data.frame(age=age.seq))
+  mu.mean <- apply(mu, 2, mean)
+  mu.PI   <- apply(mu, 2, PI, prob=0.97)
+  
+  height.sim <- sim(model, data=data.frame(age=age.seq))
+  height.PI  <- apply(height.sim, 2, PI, prob=0.97)
+  
+  plot(height ~ age, data=d2, col=rangi2, main=title)
+  
+  lines(age.seq, mu.mean)
+  lines(age.seq, mu.PI[1, ], lty=2)
+  lines(age.seq, mu.PI[2, ], lty=2)
+  
+  shade(height.PI, age.seq)
+  
+}
+
+plotPrediction2(m1, "Model 1")
+plotPrediction2(m2, "Model 2")
+plotPrediction2(m3, "Model 3")
+plotPrediction2(m4, "Model 4")
+plotPrediction2(m5, "Model 5")
+plotPrediction2(m6, "Model 6")
+```
+
+## 6H6
+
+```{r 6H6}
+# Fit model
+m6.2 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b1*age+b2*(age^2)+b3*(age^3)+b4*(age^4)+b5*(age^5)+b6*(age^6),
+    a ~ dnorm(180, 100),
+    c(b1, b2, b3, b4, b5, b6) ~ dnorm(0, 5),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d1,
+  start=list(a=a.start, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0, sigma=sigma.start)
+)
+
+# Plot estimates of all parameters
+plot(precis(m6.2))
+
+# Plot predictions of  model
+plotPrediction(m6.2, "Model 6 with Regularizing Priors")
+
+# Calculate out-of-sample deviance
+dev.m6.2 <- -2*sum(dnorm(d2$height,
+                    mean = coef(m6.2)[1] + coef(m6.2)[2]*d2$age + coef(m6.2)[3]*(d2$age^2) +
+                      coef(m6.2)[4]*(d2$age^3)+coef(m6.2)[5]*(d2$age^4)+
+                      coef(m6.2)[6]*(d2$age^5)+coef(m6.2)[7]*(d2$age^6),
+                    sd = coef(m6.2)[8],
+                    log=TRUE))
+
+```
