@@ -1,0 +1,387 @@
+---
+title: "Chapter8"
+author: "Zhang Chen"
+date: "8/3/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+rstan_options(auto_write = TRUE)
+```
+
+-------
+
+# Easy
+
+## 8E1
+
+(3)
+
+## 8E2
+
+Gibbs sampling achieves higher efficiency by using adaptive proposals, such that the proposal distribution adjusts intelligently depending on the current paramter value. The limitations of Gibbs sampling include (1) using conjugate priors and likelihood distributions, and (2) inefficiency in complex models.
+
+## 8E3
+
+HMC can not sample from discrete parameters. This is because HMC samples parameter values by gliding on the surface of the posterior distribution; when the parameter is discrete, this can not be achieved.
+
+## 8E4
+
+The effective number of samples is the number of independent samples that contain the same amount of information. This number is lower than the actual number of samples, because the steps in the chain are often autocorrelated, and therefore do not provide independent information about the posterior distribution.
+
+## 8E5
+
+1
+
+-------
+
+# Medium
+
+## 8M1
+
+```{r 8M1, include=FALSE}
+data("rugged")
+d <- rugged
+d <- d[complete.cases(d$rgdppc_2000), ]
+d$log_gdp <- log(d$rgdppc_2000)
+
+d.trim <- d[c("log_gdp", "cont_africa", "rugged")]
+
+# uniform prior on sigma
+m1.unif <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dunif(0, 10)
+  ),
+  data=d.trim)
+
+# exp prior on sigma
+m1.exp <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dexp(1)
+  ),
+  data=d.trim)
+
+```
+
+```{r 8M1-results}
+# model with uniform prior on sigma
+plot(m1.unif)
+pairs(m1.unif)
+
+# model with exp prior on sigam
+plot(m1.exp)
+pairs(m1.exp)
+```
+
+## 8M2
+
+```{r 8M2, include=FALSE}
+m2.cauchy1 <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dcauchy(0, 0.5)
+  ),
+  data=d.trim)
+
+m2.cauchy2 <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=d.trim)
+
+m2.cauchy3 <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dcauchy(0, 1.5)
+  ),
+  data=d.trim)
+
+m2.cauchy4 <- map2stan(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(0,100), 
+    bR ~ dnorm(0,10), 
+    bA ~ dnorm(0,10), 
+    bAR ~ dnorm(0,10), 
+    sigma ~ dcauchy(0, 2)
+  ),
+  data=d.trim)
+```
+
+```{r 8M2-Results, include=FALSE}
+# plot cauchy distributions with different scale parameters
+curve(dcauchy(x,location=0, scale=0.5), from=0, to=4, col="red", xlab="Density")
+curve(dcauchy(x,location=0, scale=1), from=0, to=4, col="yellow", add=TRUE)
+curve(dcauchy(x,location=0, scale=1.5), from=0, to=4, col="blue",add=TRUE)
+curve(dcauchy(x,location=0, scale=2), from=0, to=4, col="green", add=TRUE)
+
+pairs(m2.cauchy1)
+pairs(m2.cauchy2)
+pairs(m2.cauchy3)
+pairs(m2.cauchy4)
+
+```
+
+## 8M3
+
+```{r 8M3, include=FALSE}
+m3.100wp <- map2stan(m2.cauchy4, warmup=100, iter=2100)
+m3.500wp <- map2stan(m2.cauchy4, warmup=500, iter=2500)
+m3.1000wp <- map2stan(m2.cauchy4, warmup=1000, iter=3000)
+m3.2000wp <- map2stan(m2.cauchy4, warmup=2000, iter=4000)
+m3.3000wp <- map2stan(m2.cauchy4, warmup=3000, iter=5000)
+m3.4000wp <- map2stan(m2.cauchy4, warmup=4000, iter=6000)
+
+```
+
+```{r 8M3-Results}
+# 100 warmup
+plot(m3.100wp)
+
+# 500 warmup
+plot(m3.500wp)
+
+# 1000 warmup
+plot(m3.1000wp)
+
+# 2000 warmup
+plot(m3.2000wp)
+
+# 3000 warmup
+plot(m3.3000wp)
+
+# 4000 warmup
+plot(m3.4000wp)
+```
+
+--------
+
+# Hard
+
+## 8H1
+
+```{r 8H1, include=FALSE}
+mp <- map2stan(
+  alist(
+    a ~ dnorm(0,1),
+    b ~ dcauchy(0,1)
+  ),
+  data=list(y=1),
+  start=list(a=0,b=0),
+  iter=1e4, warmup=100 , WAIC=FALSE )
+
+```
+
+```{r 8H1-Results}
+plot(mp)
+```
+
+The trace plot for b is not healthy, and occasionally shows large spikes. This is because the Cauchy distribution has heavy tails, which means large numbers are still relatively plausible, and occasionally a very large value is sampled.
+
+## 8H2
+
+```{r 8H2, include=FALSE}
+data("WaffleDivorce")
+d <- WaffleDivorce
+
+d$MedianAgeMarriage_s <- scale(d$MedianAgeMarriage)
+d$Marriage_s <- scale(d$Marriage)
+
+d <- d[c("Divorce", "MedianAgeMarriage_s", "Marriage_s")]
+
+# fit model 5.1
+m5.1 <- map2stan(
+  alist(
+    Divorce ~ dnorm(mu, sigma),
+    mu <- a+bA*MedianAgeMarriage_s,
+    a ~ dnorm(10, 10),
+    bA ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ), data=d)
+
+# fit model 5.2
+m5.2 <- map2stan(
+  alist(
+    Divorce ~ dnorm(mu, sigma),
+    mu <- a+bR*Marriage_s,
+    a ~ dnorm(10, 10),
+    bR ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ), data=d)
+
+# fit model 5.3
+m5.3 <- map2stan(
+  alist(
+    Divorce ~ dnorm(mu, sigma),
+    mu <- a+bR*Marriage_s+bA*MedianAgeMarriage_s,
+    a ~ dnorm(10, 10),
+    bR ~ dnorm(0, 1),
+    bA ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ), data=d)
+```
+
+```{r 8H2-Results}
+compare(m5.1, m5.2, m5.3)
+```
+
+## 8H3
+
+```{r 8H3, include=FALSE}
+N <- 100 # number of individuals
+height <- rnorm(N,10,2) # sim total height of each
+leg_prop <- runif(N,0.4,0.5) # leg as proportion of height
+leg_left <- leg_prop*height + # sim left leg as proportion + error
+rnorm( N , 0 , 0.02 )
+leg_right <- leg_prop*height + # sim right leg as proportion + error
+rnorm( N , 0 , 0.02 )
+# combine into data frame
+d <- data.frame(height,leg_left,leg_right)
+
+m5.8s <- map2stan(
+  alist(
+    height ~ dnorm( mu , sigma ) ,
+    mu <- a + bl*leg_left + br*leg_right ,
+    a ~ dnorm( 10 , 100 ) ,
+    bl ~ dnorm( 2 , 10 ) ,
+    br ~ dnorm( 2 , 10 ) ,
+    sigma ~ dcauchy( 0 , 1 )
+  ) , data=d, chains=4,
+  start=list(a=10,bl=0,br=0,sigma=1) )
+
+m5.8s2 <- map2stan(
+  alist(
+    height ~ dnorm( mu , sigma ) ,
+    mu <- a + bl*leg_left + br*leg_right ,
+    a ~ dnorm( 10 , 100 ) ,
+    bl ~ dnorm( 2 , 10 ) ,
+    br ~ dnorm( 2 , 10 ) & T[0,] ,
+    sigma ~ dcauchy( 0 , 1 )
+  ) ,data=d, chains=4,
+  start=list(a=10,bl=0,br=0,sigma=1) )
+```
+
+```{r 8H3-Results}
+plot(m5.8s)
+pairs(m5.8s)
+
+plot(m5.8s2)
+pairs(m5.8s2)
+```
+
+The posterior distributions of beta parameters are now both skewed, but in mirror images. This is because the bl and br parameters will need to add up to a constant value, so that restricting br to be larger than 0 also restricts bl to be smaller than a certain value.
+
+## 8H4
+
+```{r 8H4}
+WAIC(m5.8s)
+WAIC(m5.8s2)
+```
+
+The model that restricts br to be positive has a smaller effective number of parameters, because by having this restriction the model becomes less flexible.
+
+## 8H5
+
+```{r 8H5}
+island_pop <- c(2, 3, 4, 5, 6, 5, 4, 3, 2, 1) # populations in all islands
+
+num_weeks <- 1e5
+positions <- rep(0, num_weeks) # place holder
+current <- 10 # start at an island
+for (i in 1:num_weeks){
+  positions[i] <- current
+  
+  proposal <- current + sample(c(-1, 1), size=1)
+  
+  if (proposal > 10){ proposal <- 1}
+  if (proposal < 1){ proposal <- 10}
+  
+  prob_move <- island_pop[proposal]/island_pop[current]
+  current <- ifelse(runif(1) < prob_move, proposal, current)
+}
+
+barplot(table(positions))
+```
+
+## 8H6
+
+```{r 8H6}
+# data: 7  waters in 10 tosses
+d <- data.frame(y=7, n=10)
+
+m.8h6 <- map(
+  alist(
+    y ~ dbinom(n, theta)
+  ), 
+  data=d, start = list(theta=d$y/d$n))
+
+post <- extract.samples(m.8h6, n=1e4)
+
+# MCMC
+num_steps <- 1e4
+post.mcmc <- rep(0, num_steps) # place holder
+current <- d$y/d$n # start position
+
+posterior <- function(theta){
+  
+  if (theta > 1 | theta < 0){
+    p <- 0
+  }else{
+    prior <- ifelse(theta > 0 & theta < 1, 1, 0)
+    likelihood <- dbinom(x=d$y, size=d$n, prob=theta)
+    p <- prior*likelihood
+  }
+  return(p)
+}
+
+for (i in 1:num_steps){
+  post.mcmc[i] <- current
+  
+  # proposal distribution
+  proposal <- rnorm(mean=current, sd=0.1, n=1)
+  
+  # move?
+  prob_move <- posterior(proposal)/posterior(current)
+  
+  current <- ifelse(runif(1) < prob_move, proposal, current)
+}
+
+dens(post.mcmc)
+dens(post, col="blue", add=TRUE)
+```
+
+
