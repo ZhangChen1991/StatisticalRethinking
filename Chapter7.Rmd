@@ -1,0 +1,309 @@
+---
+title: "Chapter7"
+author: "Zhang Chen"
+date: "8/1/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,message=FALSE}
+library(rethinking)
+```
+
+# Hard
+
+## 7H1
+
+```{r 7H1}
+data("tulips")
+d <- tulips
+str(d)
+
+# construct dummy variables
+d$bed.a <- ifelse(d$bed == "a", 1, 0)
+d$bed.b <- ifelse(d$bed == "b", 1, 0)
+
+# center predictors
+d$water.c <- d$water - mean(d$water)
+d$shade.c <- d$shade - mean(d$shade)
+
+# fit data to model
+m.7H1 <- map(
+  alist(
+    blooms ~ dnorm(mu, sigma),
+    mu <- a+bW*water.c+bS*shade.c+bWS*water.c*shade.c+bBA*bed.a + bBB*bed.b,
+    a ~ dnorm(130, 100),
+    c(bW, bS, bWS, bBA, bBB) ~ dnorm(0, 100),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d,
+  start=list(a=mean(d$blooms), bW=0, bS=0, bWS=0, bBA=0, bBB=0, sigma=sd(d$blooms))
+)
+
+```
+
+## 7H2
+
+```{r 7H2}
+# fit a model without the bed variable
+m.7H2 <- map(
+  alist(
+    blooms ~ dnorm(mu, sigma),
+    mu <- a+bW*water.c+bS*shade.c+bWS*water.c*shade.c,
+    a ~ dnorm(130, 100),
+    c(bW, bS, bWS) ~ dnorm(0, 100),
+    sigma ~ dunif(0, 100)
+  ),
+  data=d,
+  start=list(a=mean(d$blooms), bW=0, bS=0, bWS=0, sigma=sd(d$blooms))
+)
+
+# compare the two models using WAIC
+compare(m.7H1, m.7H2)
+
+plot(precis(m.7H1))
+plot(precis(m.7H2))
+
+# get the posterior distribution of means for different beds
+post <- extract.samples(m.7H1)
+
+post.a <- post$a+post$bBA
+post.b <- post$a+post$bBB
+post.c <- post$a
+
+dens(post.a, xlim=c(40, 200), xlab="Blooms (Black=Bed A; Blue=Bed B; Red=Bed C)")
+dens(post.b, add = TRUE, col="blue")
+dens(post.c, add = TRUE, col="red")
+
+```
+
+## 7H3
+
+```{r 7H3}
+data("rugged")
+d <- rugged
+
+d$log_gdp <- log(d$rgdppc_2000)
+d <- d[complete.cases(d$log_gdp), ]
+d2 <- d[d$country != "Seychelles", ]
+
+
+# fit a model with all cases
+m.7H3.1 <- map(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(8, 100),
+    c(bR, bA, bAR) ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ),
+  data=d
+)
+
+# fit a model without Seychelles
+m.7H3.2 <- map(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa+bAR*rugged*cont_africa,
+    a ~ dnorm(8, 100),
+    c(bR, bA, bAR) ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ),
+  data=d2
+)
+
+# plot the predictions from models
+plotPrediction <- function(model, data){
+  
+  rugged.seq <- seq(from=0, to=7, by=0.2)
+  
+  # generate predictions for African nations
+  mu.Africa <- link(model, data=data.frame(rugged=rugged.seq, cont_africa=1))
+  mu.Africa.mean  <- apply(mu.Africa, 2, mean)
+  mu.Africa.PI    <- apply(mu.Africa, 2, PI, prob=0.89)
+  
+  # generate predictions for Non-African nations
+  mu.NotAfrica <- link(model, data=data.frame(rugged=rugged.seq, cont_africa=0))
+  mu.NotAfrica.mean  <- apply(mu.NotAfrica, 2, mean)
+  mu.NotAfrica.PI    <- apply(mu.NotAfrica, 2, PI, prob=0.89)
+  
+  # make plots
+  par(mfrow=c(1,2))
+  
+  d.Africa    <- data[data$cont_africa==1, ]
+  d.NotAfrica <- data[data$cont_africa==0, ]
+  
+  # plot for African nations
+  plot(log_gdp ~ rugged, data=d.Africa, col=rangi2, main="African Nations")
+  lines(rugged.seq, mu.Africa.mean, col=rangi2)
+  shade(mu.Africa.PI, rugged.seq, col=alpha(rangi2, a=0.2))
+  
+  # plot for Non-African nations
+  plot(log_gdp ~ rugged, data=d.NotAfrica, main="Non-African Nations")
+  lines(rugged.seq, mu.NotAfrica.mean)
+  shade(mu.NotAfrica.PI, rugged.seq, col=alpha("black", a=0.2))
+}
+
+plotPrediction(m.7H3.1, d)
+plotPrediction(m.7H3.2, d2)
+
+# model comparison
+# with only main effect of ruggedness
+m.7H3.3 <- map(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged,
+    a ~ dnorm(8, 100),
+    bR ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ),
+  data=d2
+)
+
+# with  main effects of ruggedness and African countries
+m.7H3.4 <- map(
+  alist(
+    log_gdp ~ dnorm(mu, sigma),
+    mu <- a+bR*rugged+bA*cont_africa,
+    a ~ dnorm(8, 100),
+    c(bR, bA) ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10)
+  ),
+  data=d2
+)
+
+compare(m.7H3.2, m.7H3.3, m.7H3.4)
+
+# plot model averaged predictions
+par(mfrow=c(1,2))
+
+rugged.seq <- seq(from=0, to=7, by=0.2)
+
+d.Africa    <- d2[d2$cont_africa==1, ]
+d.NotAfrica <- d2[d2$cont_africa==0, ]
+
+# for African nations
+ensemble.Africa <- ensemble(m.7H3.2, m.7H3.3, m.7H3.4, 
+                            data=data.frame(rugged=rugged.seq, cont_africa=1))
+mu.Africa.mean <- apply(ensemble.Africa$link, 2, mean)
+mu.Africa.PI   <- apply(ensemble.Africa$link, 2, PI, prob=0.89)
+
+plot(log_gdp ~ rugged, data=d.Africa, col=rangi2, main="African Nations")
+lines(rugged.seq, mu.Africa.mean, col=rangi2)
+shade(mu.Africa.PI, rugged.seq, col=alpha(rangi2, 0.2))
+
+# for Non-African nations
+ensemble.NotAfrica <- ensemble(m.7H3.2, m.7H3.3, m.7H3.4, 
+                            data=data.frame(rugged=rugged.seq, cont_africa=0))
+mu.NotAfrica.mean <- apply(ensemble.NotAfrica$link, 2, mean)
+mu.NotAfrica.PI   <- apply(ensemble.NotAfrica$link, 2, PI, prob=0.89)
+
+plot(log_gdp ~ rugged, data=d.NotAfrica,main="Non-African Nations")
+lines(rugged.seq, mu.NotAfrica.mean)
+shade(mu.NotAfrica.PI, rugged.seq, col=alpha("black", 0.2))
+```
+
+## 7H4
+
+```{r 7H4}
+data("nettle")
+d <- nettle
+
+d$log.lang <- log(d$num.lang/d$k.pop)
+
+# center predictors
+d$mean.c <- d$mean.growing.season - mean(d$mean.growing.season)
+d$sd.c   <- d$sd.growing.season - mean(d$sd.growing.season)
+
+d$log.area <- log(d$area)
+d$log.area.c <- d$log.area-mean(d$log.area)
+
+# model (a)
+model.a <- map(
+  alist(
+    log.lang ~ dnorm(mu, sigma),
+    mu <- a+bM*mean.c+bA*log.area.c,
+    a ~ dnorm(0, 20),
+    c(bM, bA) ~ dnorm(0, 5),
+    sigma ~ dunif(0, 50)
+  ),
+  data = d)
+
+precis(model.a)
+
+# plot counterfactual predictions of model a
+mean.seq <- seq(from=-9, to=5, by=0.1)
+
+mu <- link(model.a, data.frame(mean.c=mean.seq, log.area.c=0))
+mu.mean <- apply(mu, 2, mean)
+mu.PI   <- apply(mu, 2, PI, prob=0.89)
+
+plot(log.lang ~ mean.c, data=d, type="n", 
+     xlab="Mean Growing Season", ylab="Language Diversity", main = "Mean Log Area")
+lines(mean.seq, mu.mean)
+shade(mu.PI, mean.seq)
+
+# model (b)
+model.b <- map(
+  alist(
+    log.lang ~ dnorm(mu, sigma),
+    mu <- a+bS*sd.c+bA*log.area.c,
+    a ~ dnorm(0, 20),
+    c(bS, bA) ~ dnorm(0, 5),
+    sigma ~ dunif(0, 50)
+  ),
+  data = d)
+
+precis(model.b)
+
+# plot counterfactual predictions of model b
+sd.seq <- seq(from=-3, to=5, by=0.1)
+
+mu <- link(model.b, data.frame(sd.c=sd.seq, log.area.c=0))
+mu.mean <- apply(mu, 2, mean)
+mu.PI   <- apply(mu, 2, PI, prob=0.89)
+
+plot(log.lang ~ sd.c, data=d, type="n", 
+     xlab="SD Growing Season", ylab="Language Diversity", main = "Mean Log Area")
+lines(sd.seq, mu.mean)
+shade(mu.PI, sd.seq)
+
+# model (c)
+model.c <- map(
+  alist(
+    log.lang ~ dnorm(mu, sigma),
+    mu <- a+bS*sd.c+bM*mean.c+bMS*mean.c*sd.c+bA*log.area.c,
+    a ~ dnorm(0, 20),
+    c(bS, bM, bMS, bA) ~ dnorm(0, 5),
+    sigma ~ dunif(0, 50)
+  ),
+  data = d)
+
+precis(model.c)
+
+# plot predictions of model (c)
+par(mfrow=c(1,3))
+mean.levels = c(-5, 0, 5)
+
+for (mean.level in mean.levels){
+  sd.seq <- seq(from=-5, to=5, by=0.1)
+  
+  mu <- link(model.c, data.frame(sd.c=sd.seq, mean.c=mean.level, log.area.c=0))
+  mu.mean <- apply(mu, 2, mean)
+  mu.PI   <- apply(mu, 2, PI, prob=0.89)
+
+  plot(log.lang ~ sd.c, data=d, type="n", 
+       xlab="SD of Growing Season", ylab="Language Diversity", 
+       main = paste("Centered Mean of Growing Season =", mean.level))
+  
+  lines(sd.seq, mu.mean)
+  shade(mu.PI, sd.seq)
+
+}
+
+
+```
+
