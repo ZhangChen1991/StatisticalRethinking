@@ -1,0 +1,396 @@
+---
+title: "Chapter10"
+author: "Zhang Chen"
+date: "8/8/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+library(MASS)
+```
+
+-----
+
+# Easy
+
+```{r Easy}
+# 10E1
+log(0.35/(1-0.35))
+
+# 10E2
+exp(3.2)/(1+exp(3.2))
+
+# 10E3
+OR <- exp(1.7)
+```
+
+## 10E3
+
+A log-odds of 1.7 corresponds to odds ratio of `r OR`. That is 447.5% increase in odds.
+
+## 10E4
+
+When events are counted on different temporal or spatial scales.
+
+-----
+
+# Medium
+
+## 10M1
+
+In the aggregated form, the likelihood is Binomial, with n being the total number of trials. In the disaggregated form, the likelihood is Bernoulli, with n being 1.
+
+## 10M2
+
+When the predicotr increases by one unit, the order (i.e., log) of the expected value of count number in the Possion distribution increases by 1.7.
+
+## 10M3
+
+Because the linear combination of predictors may extend from negative infinity to positive infinity, while the probability of a certain event happens must be between 0 and 1. The logit link function allows the probability parameter to be modelled as a linear combination of predictors.
+
+## 10M4
+
+In Possion distribution we are modeling the expected value of count, which has to be positive. The log link function ensures that.
+
+## 10M5
+
+It would imply that the mean of a Possion GLM can only be between 0 and 1.
+
+## 10M6
+
+The binomial distribution has maximum entropy when only two events are possible, and the expected number of each event is assumed to be constant. The constrait for the possion distribution is essentially the same.
+
+-----
+
+# Hard
+
+## 10H1
+
+```{r 10H1, include=FALSE}
+data("chimpanzees")
+d <- chimpanzees
+d$recipient <- NULL
+
+# MAP estimation
+m10.4_map <- map(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a[actor] + (bp+bpC*condition)*prosoc_left,
+    a[actor] ~ dnorm(0, 10),
+    bp ~ dnorm(0, 10),
+    bpC ~ dnorm(0, 10)
+  ),
+  data=d,
+  start=list(a=rep(0,7), bp=0, bpC=0))
+
+# Stan
+m10.4_stan <- map2stan(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a[actor] + (bp+bpC*condition)*prosoc_left,
+    a[actor] ~ dnorm(0, 10),
+    bp ~ dnorm(0, 10),
+    bpC ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, warmu=500, iter=2500)
+
+```
+
+```{r 10H1-Results}
+# trace plot for stan model
+plot(m10.4_stan)
+
+# compare precis output
+precis(m10.4_map, depth=2)
+precis(m10.4_stan, depth=2)
+
+# compare marginal posterior distributions
+pairs(m10.4_map)
+pairs(m10.4_stan)
+
+```
+
+## 10H2
+
+```{r 10H2}
+# fit simpler models
+m10.1 <- map( 
+  alist(
+    pulled_left ~ dbinom( 1 , p ) , 
+    logit(p) <- a , 
+    a ~ dnorm(0,10)
+) , data=d )
+
+m10.2 <- map( 
+  alist(
+    pulled_left ~ dbinom( 1 , p ) , 
+    logit(p) <- a + bp*prosoc_left , 
+    a ~ dnorm(0,10) , 
+    bp ~ dnorm(0,10)
+) , data=d )
+
+m10.3 <- map( 
+  alist(
+    pulled_left ~ dbinom( 1 , p ) , 
+    logit(p) <- a + (bp + bpC*condition)*prosoc_left , 
+    a ~ dnorm(0,10) , 
+    bp ~ dnorm(0,10) , 
+    bpC ~ dnorm(0,10)
+) , data=d )
+
+# compare models with WAIC
+compare(m10.1, m10.2, m10.3, m10.4_map)
+```
+
+## 10H3
+
+```{r 10H3, include=FALSE}
+data("eagles")
+d <- eagles
+
+# recode predictors
+d$P <- ifelse(d$P == "L", 1, 0)
+d$V <- ifelse(d$V == "L", 1, 0)
+d$A <- ifelse(d$A == "A", 1, 0)
+
+# fit models
+m10H3_map <- map(
+  alist(
+    y ~ dbinom(n, p),
+    logit(p) <- a + bp*P + bv*V + ba*A,
+    a ~ dnorm(0, 10),
+    c(bp, bv, ba) ~ dnorm(0, 5)
+  ),
+  data=d)
+
+m10H3_stan <- map2stan(
+  alist(
+    y ~ dbinom(n, p),
+    logit(p) <- a + bp*P + bv*V + ba*A,
+    a ~ dnorm(0, 10),
+    c(bp, bv, ba) ~ dnorm(0, 5)
+  ),
+  data=d, chains=2, warmup=2000, iter=6000)
+```
+
+```{r 10H3a-Results}
+# trace plot for stan model
+plot(m10H3_stan)
+
+# compare precis outputs
+precis(m10H3_map)
+precis(m10H3_stan)
+
+pairs(m10H3_map)
+pairs(m10H3_stan)
+```
+
+Overall the quadratic approximation is OK, but since the marginal posterior distributions for *bp* and *bv* are skewed, the quadratic approximation is not entirely accurate.
+
+```{r 10H3b}
+# the predicted probability of success and it 89% interval
+mu <- link(m10H3_stan)
+mu.mean <- apply(mu, 2, mean)
+mu.HPDI <- apply(mu, 2, HPDI)
+
+# empty plot frame
+plot(0, 0, type="n", xlab="P/A/V", ylab="Probability of Success",
+     ylim=c(0, 1), xaxt="n", xlim=c(1,8))
+
+axis(1, at=1:8, labels=c("1/1/1", "1/1/0", "1/0/1", "1/0/0",
+                         "0/1/1", "0/1/0", "0/0/1", "0/0/0"))
+
+# plot raw proportion
+prop <- d$y/d$n
+points(1:8, prop, pch=19)
+
+# plot predicted probability and 89% HPDI
+points(1:8-0.1, mu.mean)
+points(1:8-0.1, mu.HPDI[1,], pch=3)
+points(1:8-0.1, mu.HPDI[2,], pch=3)
+
+# the predicted success count and it 89% interval
+y.sim <- sim(m10H3_stan)
+
+y.mean <- apply(y.sim, 2, mean)
+y.HPDI <- apply(y.sim, 2, HPDI)
+
+# empty plot frame
+plot(0, 0, type="n", xlab="P/A/V", ylab="Success Count",
+     ylim=c(0, 30), xaxt="n", xlim=c(1,8))
+
+axis(1, at=1:8, labels=c("1/1/1", "1/1/0", "1/0/1", "1/0/0",
+                         "0/1/1", "0/1/0", "0/0/1", "0/0/0"))
+
+# plot raw count
+points(1:8, d$y, pch=19)
+
+# plot predicted success count and 89% HPDI
+points(1:8-0.1, y.mean)
+points(1:8-0.1, y.HPDI[1,], pch=3)
+points(1:8-0.1, y.HPDI[2,], pch=3)
+
+```
+
+```{r 10H3c, include=FALSE}
+m10H3_inter <- map2stan(
+  alist(
+    y ~ dbinom(n, p),
+    logit(p) <- a + bp*P + bv*V + ba*A + bpa*P*A,
+    a ~ dnorm(0, 10),
+    c(bp, bv, ba,bpa) ~ dnorm(0, 5)),
+    data=d, chains=2, warmup=2000, iter=6000)
+```
+
+```{r 10H3c-Results}
+# check trace plot
+plot(m10H3_inter)
+
+compare(m10H3_stan, m10H3_inter)
+precis(m10H3_inter)
+
+# the predicted probability of success and it 89% interval
+mu <- link(m10H3_inter)
+mu.mean <- apply(mu, 2, mean)
+mu.HPDI <- apply(mu, 2, HPDI)
+
+# empty plot frame
+plot(0, 0, type="n", xlab="P/A/V", ylab="Probability of Success",
+     ylim=c(0, 1), xaxt="n", xlim=c(1,8))
+
+axis(1, at=1:8, labels=c("1/1/1", "1/1/0", "1/0/1", "1/0/0",
+                         "0/1/1", "0/1/0", "0/0/1", "0/0/0"))
+
+# plot raw proportion
+prop <- d$y/d$n
+points(1:8, prop, pch=19)
+
+# plot predicted probability and 89% HPDI
+points(1:8-0.1, mu.mean)
+points(1:8-0.1, mu.HPDI[1,], pch=3)
+points(1:8-0.1, mu.HPDI[2,], pch=3)
+
+```
+
+Comparing the two models with WAIC shows that the model with the interaction term gets 92% of the Akaike weights, while the model without interaction only gets 8%. So the model with the interaction term is estimated to perform much better in predicting future observations.
+
+## 10H4
+
+```{r 10H4, include=FALSE}
+data("salamanders")
+d <- salamanders
+
+m10H4_map <- map(
+  alist(
+    SALAMAN ~ dpois(lambda),
+    log(lambda) <- a+bp*PCTCOVER,
+    a ~ dnorm(0,100),
+    bp ~ dnorm(0, 10)
+  ),
+  data=d,
+  start=list(a=0, bp=0))
+
+m10H4_stan <- map2stan(
+  alist(
+    SALAMAN ~ dpois(lambda),
+    log(lambda) <- a+bp*PCTCOVER,
+    a ~ dnorm(0, 100),
+    bp ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, warmup=2000, iter=6000,
+  start = list(a=0, bp=0))
+```
+
+```{r 10H4-Results}
+# check trace plot
+plot(m10H4_stan)
+
+# compare precis output
+precis(m10H4_map)
+precis(m10H4_stan)
+
+pairs(m10H4_map)
+pairs(m10H4_stan)
+
+# plot the expected counts
+PCTCOVER.seq <- seq(from=0, to=100, by=2)
+pred.data <- data.frame(PCTCOVER=PCTCOVER.seq)
+count.sim <- sim(m10H4_stan, data=pred.data, n=8000)
+count.mean <- apply(count.sim, 2, mean)
+count.HPDI <- apply(count.sim, 2, HPDI)
+
+plot(SALAMAN ~ PCTCOVER, data=d, col=rangi2,
+     xlab="Percentage of ground cover", ylab="Counts of salamanders in each plot", pch=19)
+
+lines(PCTCOVER.seq, count.mean)
+shade(count.HPDI, PCTCOVER.seq)
+
+```
+
+```{r 10H4b, include=FALSE}
+# center predictors
+d$pct.c <- d$PCTCOVER-mean(d$PCTCOVER)
+d$for.c <- d$FORESTAGE-mean(d$FORESTAGE)
+
+
+# fit models
+m10H4.1 <- map2stan(
+  alist(
+    SALAMAN ~ dpois(lambda),
+    log(lambda) <- a+bp*pct.c,
+    a ~ dnorm(0, 100),
+    bp ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, warmup=2000, iter=6000,
+  start = list(a=0, bp=0))
+
+m10H4.2 <- map2stan(
+  alist(
+    SALAMAN ~ dpois(lambda),
+    log(lambda) <- a+bp*pct.c+bf*for.c,
+    a ~ dnorm(0, 100),
+    bp ~ dnorm(0, 10),
+    bf ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, warmup=2000, iter=6000,
+  start=list(a=0, bp=0, bf=0))
+
+m10H4.3 <- map2stan(
+  alist(
+    SALAMAN ~ dpois(lambda),
+    log(lambda) <- a+bp*pct.c+bf*for.c+bfp*for.c*pct.c,
+    a ~ dnorm(0, 100),
+    bp ~ dnorm(0, 10),
+    bf ~ dnorm(0, 10),
+    bfp ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, warmup=2000, iter=6000,
+  start=list(a=0, bp=0, bf=0, bfp=0))
+```
+
+```{r 10H4b-Results}
+# check trace plot
+plot(m10H4.1)
+plot(m10H4.2)
+plot(m10H4.3)
+
+compare(m10H4.1, m10H4.2, m10H4.3)
+
+count.ensemble <-ensemble(m10H4.1, m10H4.2, m10H4.3)
+
+count.mean <- apply(count.ensemble$sim, 2, mean)
+count.HPDI <- apply(count.ensemble$sim, 2, HPDI)
+
+observed.count <- d$SALAMAN+rnorm(n=nrow(d), mean=0, sd=0.1) # dodge points a bit
+
+plot(count.mean ~ observed.count, xlab="Observed Count", ylab="Predicted Count",
+     xlim=c(0, 12), ylim=c(0, 12), col=rangi2)
+abline(a=0, b=1, lty=2)
+arrows(observed.count, count.HPDI[1, ], observed.count, count.HPDI[2, ],
+       length=0.05, angle=90, code=3)
+```
