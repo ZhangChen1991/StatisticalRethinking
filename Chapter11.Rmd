@@ -1,0 +1,302 @@
+---
+title: "Chapter11"
+author: "Zhang Chen"
+date: "8/13/2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+```
+
+------
+
+# Medium
+
+## 11M1
+
+```{r 11M1}
+ratings_count <- c(12, 6, 7, 41)
+ratings_prop  <- ratings_count/sum(ratings_count)
+ratings_cum   <- cumsum(ratings_prop)
+logodds_cum   <- logit(ratings_cum)
+```
+
+## 11M2
+
+```{r 11M2}
+plot(1:4, ratings_cum, type="b", xlab="response", ylab="cumulative proportion", xaxt = "n")
+axis(1, at=1:4)
+
+# add lines to indicate cumulative proportion and proportion for each response
+for (i in 1:4){
+  lines(c(i,i), c(0, ratings_cum[i]), col="gray", lwd=4) # cumulative proportion
+  lines(c(i,i), c(ratings_cum[i], ratings_cum[i]-ratings_prop[i]), col=rangi2, lwd=4)
+}
+
+```
+
+## 11M3
+
+```{r 11M3}
+dzib <- function(x, p_zero, size, prob){
+  ll <- ifelse(
+    x==0,
+    p_zero+dbinom(x, size, prob),
+    (1-p_zero)*dbinom(x, size, prob)
+  )
+  
+  return(ll)
+}
+
+# check output
+dzib(x=3, p_zero=0.2, size=4, prob=0.6) == dzibinom(x=3, p_zero=0.2, size=4, prob=0.6)
+dzib(x=3, p_zero=0.5, size=4, prob=0.6) == dzibinom(x=3, p_zero=0.5, size=4, prob=0.6)
+dzib(x=3, p_zero=0.2, size=9, prob=0.7) == dzibinom(x=3, p_zero=0.2, size=9, prob=0.7)
+
+```
+
+------
+
+# Hard
+
+## 11H1
+
+```{r 11H1, include=FALSE}
+data("Hurricanes")
+d <- Hurricanes
+
+m11.1 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a,
+    a ~ dnorm(0, 10)
+  ),
+  data=d, chains=2, cores=2, warmup=2000, iter=6000)
+
+m11.2 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a+bf*femininity,
+    a ~ dnorm(0, 10),
+    bf ~ dnorm(0, 1)
+  ),
+  data=d, chains=2, cores=2, warmup=2000, iter=6000)
+```
+
+```{r 11H1-Results}
+# check trace plots
+plot(m11.1)
+plot(m11.2)
+
+# compare the two models
+compare(m11.1, m11.2)
+
+# parameter estimates from m11.2
+precis(m11.2)
+pairs(m11.2)
+```
+
+## 11H2
+
+```{r 11H2, include=FALSE}
+m11.3 <- map2stan(
+  alist(
+    deaths ~ dgampois(mu, theta),
+    log(mu) <- a+bf*femininity,
+    a ~ dnorm(0, 10),
+    bf ~ dnorm(0, 1),
+    theta ~ dexp(1)
+  ),
+  data=d, chains=2, cores=2, warmup=2000, iter=6000,
+  constraints=list(theta="lower=0"))
+```
+
+
+```{r 11H2-Results}
+# check trace plot
+plot(m11.3)
+
+# parameter estimates
+precis(m11.3)
+```
+
+## 11H3
+
+```{r 11H3, include=FALSE}
+#center predictors
+d$femininity_sd   <- scale(d$femininity)
+d$damage_norm_sd  <- scale(d$damage_norm)
+d$min_pressure_sd <- scale(d$min_pressure)
+
+m11.4 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a+bfd*femininity_sd*damage_norm_sd,
+    a ~ dnorm(0, 10),
+    bfd~ dnorm(0, 1)
+  ),
+  data=d,
+  chains=2, cores=2, warmup=2000, iter=6000)
+
+m11.5 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a+bfm*femininity_sd*min_pressure_sd,
+    a ~ dnorm(0, 10),
+    bfm~ dnorm(0, 1)
+  ),
+  data=d,
+  chains=2, cores=2, warmup=2000, iter=6000)
+
+m11.6 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a+bfd*femininity_sd*damage_norm_sd+bfm*femininity_sd*min_pressure_sd,
+    a ~ dnorm(0, 10),
+    bfd ~ dnorm(0, 1),
+    bfm ~ dnorm(0, 1)
+  ),
+  data=d,
+  chains=2, cores=2, warmup=2000, iter=6000)
+
+```
+
+```{r 11H3-Results}
+# check the trace plots
+plot(m11.4)
+plot(m11.5)
+plot(m11.6)
+
+# compare the models
+compare(m11.4, m11.5, m11.6)
+
+# plot counterfactual plots for m11.4
+femininity.levels=c(-1, 1)
+damage_norm_seq <- seq(from=-1, to=6, by=0.1)
+
+par(mfrow=c(1,2))
+
+for (femininity.level in femininity.levels){
+  
+  pred.data <- data.frame(femininity_sd=femininity.level, damage_norm_sd=damage_norm_seq)
+  
+  lambda <- link(m11.4, data=pred.data)
+  lambda.mean <- apply(lambda, 2, mean)
+  lambda.HPDI <- apply(lambda, 2, HPDI)
+  
+  plot(1, 1, type="n", xlab="Damage (Standardized)", ylab="Lambda", 
+       ylim=c(0, max(lambda.mean)+10), xlim=c(-1, 6),
+       main=concat("Femininity Level = ", femininity.level))
+  lines(damage_norm_seq, lambda.mean)
+  shade(lambda.HPDI, damage_norm_seq)
+}
+```
+
+## 11H4
+
+```{r 11H4, include=FALSE}
+d$log_damage_norm_sd <- scale(log(d$damage_norm))
+
+m11.7 <- map2stan(
+  alist(
+    deaths ~ dpois(lambda),
+    log(lambda) <- a+bfd*femininity_sd*log_damage_norm_sd,
+    a ~ dnorm(0, 10),
+    bfd~ dnorm(0, 1)
+  ),
+  data=d,
+  chains=2, cores=2, warmup=2000, iter=6000)
+```
+
+```{r 11H4-Results}
+# check the trace plot
+plot(m11.7)
+
+# compare models
+compare(m11.4, m11.7)
+```
+
+## 11H5
+
+```{r 11H5}
+data("Trolley")
+d <- Trolley
+
+m11.8 <- map(
+  alist(
+    response ~ dordlogit(phi, cutpoints),
+    phi <- bC*contact+bM*male+bCM*contact*male,
+    c(bC, bM, bCM) ~ dnorm(0 ,10),
+    cutpoints ~ dnorm(0, 10)
+  ),
+  data=d, 
+  start=list(bC=0, bM=0, bCM=0, cutpoints=c(-2,-1,0,1,2,2.5))
+)
+
+precis(m11.8)
+
+# plots
+par(mfrow=c(1,2))
+
+post <- extract.samples(m11.8)
+
+for(gender in c("male", "female")){
+  male <- ifelse(gender=="male", 1, 0)
+  contact <- 0:1
+  
+  plot(1, 1, type="n", xlab="contact", ylab="probability",
+       xlim=c(0,1), ylim=c(0,1), xaxp=c(0,1,1) , yaxp=c(0,1,2),
+       main=concat("Gender = ", gender))
+  
+  for (s in 1:100){
+    ak <- post$cutpoints[s, 1:6]
+    phi <- post$bC[s]*contact+post$bM[s]*male+post$bCM[s]*contact*male
+    pk <- pordlogit(1:6, a=ak, phi=phi)
+    
+    for (i in 1:6){
+      lines(contact, pk[,i], col=col.alpha(rangi2, 0.2))
+    }
+  }
+  
+}
+
+```
+
+## 11H6
+
+```{r 11H6}
+data("Fish")
+d <- Fish
+
+d$loghours <- log(d$hours)
+
+m11.9 <- map(
+  alist(
+    fish_caught ~ dzipois(p, lambda),
+    logit(p) <- ap,
+    log(lambda) <-al+loghours,
+    ap ~ dnorm(0, 5),
+    al ~ dnorm(0, 5)
+  ),
+  data=d)
+
+m11.10 <- map(
+  alist(
+    fish_caught ~ dzipois(p, lambda),
+    logit(p) <- ap+bCp*camper+bPp*persons+bCHp*child,
+    log(lambda) <-al+loghours+bLl*livebait+bCl*camper+bPl*persons+bCHl*child,
+    c(ap, bCp, bPp, bCHp) ~ dnorm(0, 5),
+    c(al, bLl, bCl, bPl, bCHl) ~ dnorm(0, 5)
+  ),
+  data=d)
+
+compare(m11.9, m11.10)
+precis(m11.10)
+```
+
