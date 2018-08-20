@@ -1,0 +1,304 @@
+---
+title: "Chapter12"
+author: "Zhang Chen"
+date: "8/15/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+```
+
+-----
+
+# Easy
+
+## 12E1
+
+(a)
+
+## 12E2
+
+y ~ Binomial(1, p)
+
+logit(p) = a + a_group[group] + b*x
+
+a ~ Normal(0, 10)
+
+a_group[group] ~ Normal(0, sigma_group)
+
+b ~ Normal(0, 1)
+
+sigma_group ~ HalfCauchy(0, 2)
+
+## 12E3
+
+y ~ Normal(mu, sigma)
+
+mu = a + a_group[group] + b*x
+
+a ~ Normal(0, 20)
+
+a_group[group] ~ Normal(0, sigma_group)
+
+b ~ Normal(0, 1)
+
+sigma ~ HalfCauchy(0, 2)
+
+sigma_group ~ HalfCauchy(0, 2)
+
+-----
+
+# Medium
+
+## 12M1
+
+```{r 12M1, include=FALSE}
+data("reedfrogs")
+d <- reedfrogs
+
+d$tank <- 1:nrow(d)
+d$pred <- ifelse(d$pred == "pred", 1, 0)
+d$big  <- ifelse(d$size == "big", 1, 0)
+
+# model with only varying intercepts
+m12.1 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank],
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dnorm(0, sigma),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+
+# model with the main effect of predation
+m12.2 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank]+bp*pred,
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dnorm(0, sigma),
+    bp ~ dnorm(0, 1),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+
+# model with the main effect of size
+m12.3 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank]+bb*big,
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dnorm(0, sigma),
+    bb ~ dnorm(0, 1),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+
+# model with both the main effect of size and the main effect of predation
+m12.4 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank]+bb*big+bp*pred,
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dnorm(0, sigma),
+    c(bb, bp) ~ dnorm(0, 1),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+
+# model with both main effects and the interaction effect
+m12.5 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank]+bb*big+bp*pred+bbp*big*pred,
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dnorm(0, sigma),
+    c(bb, bp, bbp) ~ dnorm(0, 1),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+```
+
+```{r 12M1-Results}
+# compare parameters across models
+coeftab(m12.1, m12.2, m12.3, m12.4, m12.5)
+```
+
+Models that include the effect of predation estimate the sigma paramter (i.e., variation across tanks) to be smaller than models that do not include this effect. This is because predation explains part of the variation across tanks in survival rates, and once that is taken into account, the remaining unexplained variation across tanks becomes smaller.
+
+## 12M2
+
+```{r 12M2}
+compare(m12.1, m12.2, m12.3, m12.4, m12.5)
+```
+
+## 12M3
+
+```{r 12M3, include=FALSE}
+# model with only varying intercepts
+m12.1_cauchy <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a + a_tank[tank],
+    a ~ dnorm(0, 1),
+    a_tank[tank] ~ dcauchy(0, sigma),
+    sigma ~ dcauchy(0,1)
+  ),
+  data=d, iter=4000, chains=4)
+```
+
+```{r 12M3}
+coeftab(m12.1, m12.1_cauchy)
+
+# plot normal and cauchy distributions
+curve(dnorm(x, mean=1.5, sd=1.5), from=-3, to=6, ylab="Probability Density")
+curve(dcauchy(x, location=1.5, scale=1.5), from=-3, to=6, add=TRUE, col="red")
+
+```
+
+Tanks numbered 2, 4, 7, 20 and 38 have much larger intercepts when using the Cauchy prior. This is because Cauchy distributions have thicker tails than normal distributions, therefore larger deviations of tank-specific intercepts from the mean intercept of all tanks are more likely to occur under a Cauchy distribution than under a normal distribution.
+
+## 12M4
+
+```{r 12M4, include=FALSE}
+data("chimpanzees")
+d <- chimpanzees
+
+d$recipient <- NULL
+d$block_id  <- d$block
+
+# fit the cross-classified model from the chapter
+m12.6 <- map2stan(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a + a_actor[actor] + a_block[block_id] + 
+      (bp + bpc*condition)*prosoc_left,
+    a_actor[actor] ~ dnorm(0, sigma_actor),
+    a_block[block_id] ~ dnorm(0, sigma_block),
+    c(a, bp, bpc) ~ dnorm(0, 10),
+    c(sigma_actor, sigma_block) ~ dcauchy(0,1)
+  ),
+  data=d, warmup=1000, iter=6000, chains=4, cores=3)
+
+# fit the cross-classified model from the practice
+m12.7 <- map2stan(
+  alist(
+    pulled_left ~ dbinom(1, p),
+    logit(p) <- a_actor[actor] + a_block[block_id] + 
+      (bp + bpc*condition)*prosoc_left,
+    a_actor[actor] ~ dnorm(a, sigma_actor),
+    a_block[block_id] ~ dnorm(b, sigma_block),
+    c(a, b, bp, bpc) ~ dnorm(0, 10),
+    c(sigma_actor, sigma_block) ~ dcauchy(0,1)
+  ),
+  data=d, warmup=1000, iter=6000, chains=4, cores=3)
+```
+
+```{r 12M4-Results}
+precis(m12.6)
+precis(m12.7)
+```
+
+------
+
+# Hard
+
+## 12H1
+
+```{r 12H1, include=FALSE}
+data("bangladesh")
+d <- bangladesh
+
+d$district_id <- as.integer(as.factor(d$district))
+
+# fixed-effects model
+m12.8 <- map2stan(
+  alist(
+    use.contraception ~ dbinom(1, p),
+    logit(p) <- a_district[district_id],
+    a_district[district_id] ~ dnorm(0, 5) 
+  ),
+  data=d, warmup=1000, iter=6000, chains=3, cores=3)
+
+# varying-effects model
+m12.9 <- map2stan(
+  alist(
+    use.contraception ~ dbinom(1, p),
+    logit(p) <- a_district[district_id],
+    a_district[district_id] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 5),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=d, warmup=1000, iter=6000, chains=3, cores=3)
+
+```
+
+```{r 12H1-Results}
+# get the raw proportions for each district
+d.prop <- aggregate(use.contraception ~ district, data=d, mean)
+
+# get the predictions from the fixed-effects model
+post <- extract.samples(m12.8)
+d.prop$fixed.pred <- logistic(apply(post$a_district, 2, mean))
+
+# get the predictions from the varying-effects model
+post <- extract.samples(m12.9)
+d.prop$varying.pred <- logistic(apply(post$a_district, 2, mean))
+
+varying.pred.mean <- logistic(mean(post$a))
+
+# count sample size in each district
+d.prop$sample <- data.frame(table(d$district_id))$Freq
+
+# make a plot of predictions of two models
+plot(0, 0, type="n", xlim=c(1,60), ylim=c(0, 1), 
+     xlab="District ID", ylab = "Probability of Using Contraception")
+
+points(d.prop$fixed.pred)
+points(d.prop$varying.pred, pch=16, col=rangi2)
+abline(h=varying.pred.mean, lty=2)
+
+# magnitude of disagreement between two models as a function of sample size
+d.prop$discrep <- abs(d.prop$fixed.pred-d.prop$varying.pred)
+plot(discrep ~ sample, data=d.prop, 
+     xlab="Sample Size in Each District", ylab = "Discrepancy Between Two Models")
+```
+
+## 12H2
+
+```{r 12H2, include=FALSE}
+data("Trolley")
+d <- Trolley
+d$id <- as.integer(d$id)
+d$case <- NULL
+
+# fit model without varying intercepts
+m12.10 <- map2stan(
+  alist(
+    response ~ dordlogit(phi, cutpoints),
+    phi <- bA*action+bI*intention+bC*contact,    
+    c(bA, bI, bC, bAI, bCI) ~ dnorm(0, 10),
+    cutpoints ~ dnorm(0, 10)
+  ),
+  data=d, warmup=2000, iter=6000, chains=4, cores=3,
+  start=list(bA=0, bI=0, bC=0, bAI=0, bCI=0, cutpoints=c(-2,-1,0,1,2,2.5)))
+
+# fit model with varying intercepts
+m12.10 <- map2stan(
+  alist(
+    response ~ dordlogit(phi, cutpoints[id]),
+    phi <- bA*action+bI*intention+bC*contact,    
+    c(bA, bI, bC, bAI, bCI) ~ dnorm(0, 10),
+    cutpoints[id] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=d, warmup=2000, iter=6000, chains=4, cores=3)
+```
+
