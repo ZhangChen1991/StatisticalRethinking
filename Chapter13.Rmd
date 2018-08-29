@@ -1,0 +1,421 @@
+---
+title: "Chapter13"
+author: "Zhang Chen"
+date: "8/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+```
+
+-----
+
+# Medium
+
+## 13M1
+
+```{r 13M1, include=FALSE}
+library(MASS)
+
+# define population of cafes
+a <- 3.5
+b <- (-1)
+sigma_a <- 1
+sigma_b <- 0.9
+rho <- (-0.7)
+
+Mu <- c(a, b)
+sigmas <- c(sigma_a, sigma_b)
+Rho <- matrix(c(1, rho, rho, 1), nrow=2)
+
+Sigma <- diag(sigmas) %*% Rho %*% diag(sigmas)
+
+# simulate varying effects for each cafe
+N_cafes <- 20
+set.seed(10)
+vary_effects <- mvrnorm(N_cafes, Mu, Sigma)
+
+a_cafe <- vary_effects[, 1]
+b_cafe <- vary_effects[, 2]
+
+# simulate observations
+N_visits <- 10
+afternoon <- rep(0:1, N_visits*N_cafes/2)
+cafe_id   <- rep(1:N_cafes, each=N_visits)
+
+mu <- a_cafe[cafe_id]+b_cafe[cafe_id]*afternoon
+sigma <- 0.5
+wait <- rnorm(N_visits*N_cafes, mu, sigma)
+d <- data.frame(cafe=cafe_id, afternoon=afternoon, wait=wait)
+
+# fit a stan model
+m13.1 <- map2stan(
+  alist(
+    wait ~ dnorm(mu, sigma),
+    mu <- a_cafe[cafe]+b_cafe[cafe]*afternoon,
+    c(a_cafe, b_cafe)[cafe] ~ dmvnorm2(c(a, b), sigma_cafe, Rho),
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    sigma_cafe ~ dcauchy(0, 2),
+    sigma ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=d, warmup=2000, iter=5000, chains=2, cores=2)
+
+```
+
+```{r, 13M1-Results}
+# plot posterior distribution of the correlation
+post <- extract.samples(m13.1)
+dens(post$Rho[,1, 2])
+```
+
+## 13M2
+
+```{r 13M2, include=FALSE}
+m13.2 <- map2stan(
+  alist(
+    wait ~ dnorm(mu, sigma),
+    mu <- a_cafe[cafe]+b_cafe[cafe]*afternoon,
+    a_cafe[cafe] ~ dnorm(a, sigma_a),
+    b_cafe[cafe] ~ dnorm(b, sigma_b),
+    a ~ dnorm(0, 10),
+    b ~ dnorm(0, 10),
+    sigma_a ~ dcauchy(0, 2),
+    sigma_b ~ dcauchy(0, 2),
+    sigma ~ dcauchy(0, 2)
+  ),
+  data=d, warmup=2000, iter=5000, chains=2, cores=2)
+```
+
+```{r, 13M2-Results}
+compare(m13.1, m13.2)
+
+post <- extract.samples(m13.1)
+a_cafe.m13.1 <- apply(post$a_cafe, 2, median)
+b_cafe.m13.1 <- apply(post$b_cafe, 2, median)
+
+post <- extract.samples(m13.2)
+a_cafe.m13.2 <- apply(post$a_cafe, 2, median)
+b_cafe.m13.2 <- apply(post$b_cafe, 2, median)
+
+plot(a_cafe, b_cafe, pch=16, xlim=c(2,6), ylim=c(-3, 1))
+points(a_cafe.m13.1, b_cafe.m13.1, col="blue", pch=16)
+points(a_cafe.m13.2, b_cafe.m13.2, col="red", pch=16)
+
+for (i in 1:N_cafes){
+  lines(c(a_cafe[i], a_cafe.m13.1[i]), c(b_cafe[i], b_cafe.m13.1[i]), col=col.alpha("blue", 0.4))
+  lines(c(a_cafe[i], a_cafe.m13.2[i]), c(b_cafe[i], b_cafe.m13.2[i]), col=col.alpha("red", 0.4))
+}
+```
+
+## 13M3
+
+```{r 13M3, include=FALSE}
+data("UCBadmit")
+d <- UCBadmit
+d$male <- ifelse(d$applicant.gender == "male", 1, 0)
+d$dept_id <- coerce_index(d$dept)
+
+m13.3 <- map2stan(
+  alist(
+    admit ~ dbinom(applications, p),
+    logit(p) <- a_dept[dept_id]+bm_dept[dept_id]*male,
+    c(a_dept, bm_dept)[dept_id] ~ dmvnorm2(c(a, bm), sigma_dept, Rho),
+    a ~ dnorm(0, 10),
+    bm ~ dnorm(0, 1),
+    sigma_dept ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=d, warmup=1000, iter=5000, chains=3, cores=3)
+
+m13.3NC <- map2stan(
+  alist(
+    admit ~ dbinom(applications, p),
+    logit(p) <- A+BM*male,
+    A <- a+a_dept[dept_id],
+    BM <- bm+bm_dept[dept_id],
+    
+    c(a_dept, bm_dept)[dept_id] ~ dmvnormNC(sigma_dept, Rho),
+    a ~ dnorm(0, 10),
+    bm ~ dnorm(0, 1),
+    sigma_dept ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=d, warmup=1000, iter=5000, chains=3, cores=3)
+```
+
+```{r 13M3-Results}
+precis(m13.3)
+precis(m13.3NC)
+```
+
+
+In this particular case, the centered version samples more efficiently than the non-centered parameterization, as reflected by the larger numbers of effective sample sizes from the centered version.
+
+## 13M4
+
+```{r 13M4, include=FALSE}
+# Gaussian process regression
+data("islandsDistMatrix")
+Dmat <- islandsDistMatrix
+
+data("Kline2")
+d <- Kline2
+d$society <- 1:10
+
+m13.4 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a+g[society]+bp*logpop,
+    g[society] ~ GPL2(Dmat, etasq, rhosq, 0.01),
+    a ~ dnorm(0, 10),
+    bp ~ dnorm(0, 1),
+    etasq ~ dcauchy(0, 1),
+    rhosq ~ dcauchy(0, 1)
+  ),
+  data=list(
+    total_tools=d$total_tools,
+    logpop=d$logpop,
+    society=d$society,
+    Dmat=Dmat),
+  warmup=2000, iter=1e4, chains=4, cores=2)
+
+# interaction between contact and population (log)
+d$contact_high <- ifelse(d$contact == "high", 1, 0)
+
+m13.5 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a+bp*logpop+bc*contact_high+bpc*logpop*contact_high,
+    a ~ dnorm(0, 100),
+    c(bp, bc, bpc) ~ dnorm(0, 1)
+  ),
+  data=d, warmup=2000, iter=1e4, chains=4, cores=2)
+
+# no interaction
+m13.6 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a+bp*logpop+bc*contact_high,
+    a ~ dnorm(0, 100),
+    c(bp, bc) ~ dnorm(0, 1)
+  ),
+  data=d, warmup=2000, iter=1e4, chains=4, cores=2)
+
+# no contact rate
+m13.7 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a+bp*logpop,
+    a ~ dnorm(0, 100),
+    bp ~ dnorm(0, 1)
+  ),
+  data=d, warmup=2000, iter=1e4, chains=4, cores=2)
+
+# no log-population
+m13.8 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a+bc*contact_high,
+    a ~ dnorm(0, 100),
+    bc ~ dnorm(0, 1)
+  ),
+  data=d, warmup=2000, iter=1e4, chains=4, cores=2)
+```
+
+```{r 13M4-Results}
+compare(m13.4, m13.5, m13.6, m13.7, m13.8)
+```
+
+-----
+
+# Hard
+
+## 13H1
+
+```{r 13H1, include=FALSE}
+data("bangladesh")
+d <- bangladesh
+
+dlist <- list(
+  district_id = coerce_index(d$district),
+  use_cont = d$use.contraception,
+  urban = d$urban)
+
+# fit a stan model
+m13H1 <- map2stan(
+  alist(
+    use_cont ~ dbinom(1, p),
+    
+    logit(p) <- A+BU*urban,
+    A <- a+a_district[district_id],
+    BU <- bu + bu_district[district_id],
+    
+    c(a_district, bu_district)[district_id] ~ dmvnormNC(sigma_district, Rho),
+    a ~ dnorm(0, 1),
+    bu ~ dnorm(0, 1),
+    sigma_district ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=dlist, warmup=2000, iter=6000, chains=3, cores=3)
+```
+
+
+```{r 13H1-Results}
+# inspect precis output
+precis(m13H1, depth=2, pars=c("a", "bu", "Rho", "sigma_district"))
+
+# plot the posterior distribution for the correlation between slope and intercept
+post <- extract.samples(m13H1)
+dens(post$Rho[, 1,2])
+
+# plot the median slope and intercept for all districts
+slope.median     <- apply(post$bu_district, 2, median)
+intercept.median <- apply(post$a_district, 2, median)
+
+plot(slope.median ~ intercept.median, col=rangi2, pch=16,
+     xlab="Median intercept for each district",
+     ylab="Median slope for each district")
+
+# plot the median probability of using contraception in urban and rural areas
+rural.median <- logistic(apply(post$a_district, 2, median))
+urban.median <- logistic(apply(post$a_district+post$bu_district, 2, median))
+
+plot(urban.median ~ rural.median, col=rangi2, pch=16, xlim=c(0.2, 0.8), ylim=c(0.2, 0.8),
+     xlab="Median probability of using contraception in rural area",
+     ylab="Median probability of using contraception in urban area")
+abline(a=0, b=1, lty=2)
+```
+
+## 13H2
+
+```{r 13H2, include=FALSE}
+data("Oxboys")
+d <- Oxboys
+
+d$Subject <- coerce_index(d$Subject)
+
+# fit stan model
+m13H2 <- map2stan(
+  alist(
+    height ~ dnorm(mu, sigma),
+    
+    mu <- A + BA*age,
+    A <- a+a_s[Subject],
+    BA <- ba + ba_s[Subject],
+    
+    c(a_s, ba_s)[Subject] ~ dmvnormNC(sigma_s, Rho),
+    a ~ dnorm(140, 10),
+    ba ~ dnorm(0, 2),
+    sigma_s ~ dcauchy(0, 2),
+    sigma ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=d, warmup=2000, iter=8000, chains=3, cores=3)
+
+m13H2.centered <- map2stan(
+  alist(
+    height ~ dnorm(mu, sigma),
+    
+    mu <- A + BA*age,
+    A <- a+a_s[Subject],
+    BA <- ba + ba_s[Subject],
+    
+    c(a_s, ba_s)[Subject] ~ dmvnorm2(0, sigma_s, Rho),
+    a ~ dnorm(140, 10),
+    ba ~ dnorm(0, 2),
+    sigma_s ~ dcauchy(0, 2),
+    sigma ~ dcauchy(0, 2),
+    Rho ~ dlkjcorr(2)
+  ),
+  data=d, warmup=2000, iter=8000, chains=3, cores=3)
+```
+
+```{r 13H2-Results}
+# inspect precis output
+precis(m13H2, depth=2, pars=c("a", "ba", "sigma_s", "sigma", "Rho"))
+precis(m13H2.centered, depth=2, pars=c("a", "ba", "sigma_s", "sigma", "Rho"))
+```
+
+## 13H3
+
+```{r 13H3}
+# plot posterior distribution for correlation
+post <- extract.samples(m13H2)
+dens(post$Rho[, 1, 2])
+```
+
+## 13H4
+
+```{r 13H4}
+library(MASS)
+
+# ignore uncertainty in posterior
+# use the median of all parameters
+a.median  <- median(post$a)
+ba.median <- median(post$ba)
+sigma.a.median <- median(post$sigma_s[, 1])
+sigma.ba.median <- median(post$sigma_s[, 2])
+rho.median <- median(post$Rho[, 1, 2])
+sigma.median <- median(post$sigma)
+
+Mu    <- c(a.median, ba.median)
+Sigma <- matrix(c(sigma.a.median^2, sigma.a.median*sigma.ba.median*rho.median,
+                  sigma.a.median*sigma.ba.median*rho.median, sigma.ba.median^2), nrow=2)
+
+# simulate ten varying slopes and intercepts
+varying <- mvrnorm(n=10, Mu, Sigma)
+
+# plot results
+age.seq <- seq(-1, 1, length.out=9)
+
+plot(0, 0, type="n", xlab="Age (centered)", ylab="Simulated Height", 
+     xlim=c(-1, 1), ylim=c(130, 180))
+
+for (i in 1:10){
+  height.mu <- varying[i,1]+varying[i,2]*age.seq
+  height.sim <- rnorm(n = 9, mean=height.mu, sd=sigma.median)
+  lines(age.seq, height.sim, col=col.alpha("black", alpha=0.4))
+}
+
+# now include uncertainty in posterior distributions
+a.sim <- post$a[1:10]
+ba.sim <- post$ba[1:10]
+sigma.a.sim<- post$sigma_s[1:10, 1]
+sigma.ba.sim <- post$sigma_s[1:10, 2]
+rho.sim <- post$Rho[1:10, 1, 2]
+sigma.sim <- post$sigma[1:10]
+
+# simulate and plot data
+plot(0, 0, type="n", xlab="Age (centered)", ylab="Simulated Height", 
+     xlim=c(-1, 1), ylim=c(130, 180))
+
+for (i in 1:10){
+  Mu <- c(a.sim[i], ba.sim[i])
+  Sigma <- matrix(c(sigma.a.sim[i]^2, sigma.a.sim[i]*sigma.ba.sim[i]*rho.sim[i],
+                    sigma.a.sim[i]*sigma.ba.sim[i]*rho.sim[i], sigma.ba.sim[i]^2), nrow=2)
+  
+  varying <- mvrnorm(n = 1, Mu, Sigma)
+  
+  height.mu <- varying[1]+varying[2]*age.seq
+  height.sim <- rnorm(n = 9, mean=height.mu, sd=sigma.sim[i])
+  
+  lines(age.seq, height.sim, col=col.alpha("black", alpha=0.4))
+}
+
+```
+
+
+
+
+
+
+
+
+
