@@ -1,0 +1,280 @@
+---
+title: "Chapter14"
+author: "Zhang Chen"
+date: "8/30/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(rethinking)
+```
+
+-----
+
+# Medium
+
+## 14M2
+
+```{r 14M2, include=FALSE}
+data(milk)
+d <- milk
+
+d$neocortex.prop <- d$neocortex.perc/100
+d$logmass <- log(d$mass)
+
+# prepare data
+dlist <- list(
+  kcal = d$kcal.per.g,
+  neocortex = d$neocortex.prop,
+  logmass = d$logmass)
+
+# fit intercept only model
+m14.1 <- map2stan(
+  alist(
+    kcal ~ dnorm(mu, sigma),
+    mu <- a,
+    a ~ dnorm(0, 100),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=dlist, iter=1e4, chains=2, cores=2)
+
+# fit model with logmass as predictor
+m14.2 <- map2stan(
+  alist(
+    kcal ~ dnorm(mu, sigma),
+    mu <- a+bM*logmass,
+    a ~ dnorm(0, 100),
+    bM ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=dlist, iter=1e4, chains=2, cores=2)
+
+# fit model with neocortex as predictor (missing value)
+m14.3 <- map2stan(
+  alist(
+    kcal ~ dnorm(mu, sigma),
+    mu <- a+bN*neocortex,
+    neocortex ~ dnorm(nu, sigma_N),
+    nu ~ dnorm(0.5, 1),
+    sigma_N ~ dcauchy(0, 1),
+    a ~ dnorm(0, 100),
+    bN ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=dlist, iter=1e4, chains=2, cores=2)
+
+# fit model with both predictors
+m14.4 <- map2stan(
+  alist(
+    kcal ~ dnorm(mu, sigma),
+    mu <- a+bN*neocortex+bM*logmass,
+    neocortex ~ dnorm(nu, sigma_N),
+    nu ~ dnorm(0.5, 1),
+    sigma_N ~ dcauchy(0, 1),
+    a ~ dnorm(0, 100),
+    c(bN, bM) ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=dlist, iter=1e4, chains=2, cores=2)
+```
+
+```{r 14M2-Results}
+compare(m14.1, m14.2, m14.3, m14.4)
+```
+
+## 14M3
+
+```{r 14M3, include=FALSE}
+data("WaffleDivorce")
+d <- WaffleDivorce
+
+# use original measurement errors
+dlist <- list(
+  div_obs = d$Divorce,
+  div_sd = d$Divorce.SE,
+  mar_obs = d$Marriage,
+  mar_sd = d$Marriage.SE,
+  A=d$MedianAgeMarriage)
+
+m14.5 <- map2stan(
+  alist(
+    div_est ~ dnorm(mu, sigma),
+    mu <- a+bA*A+bR*mar_est[i],
+    div_obs ~ dnorm(div_est, div_sd),
+    mar_obs ~ dnorm(mar_est, mar_sd),
+    c(a, bA, bR) ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 2.5)
+  ),
+  data=dlist, 
+  start=list(div_est=dlist$div_obs, mar_est=dlist$mar_obs),
+  WAIC=FALSE, iter=5000, warmup=1000, chains=2, cores=2,
+  control=list(adapt_delta=0.95))
+
+# now double the standard errors
+dlist <- list(
+  div_obs = d$Divorce,
+  div_sd = d$Divorce.SE*2,
+  mar_obs = d$Marriage,
+  mar_sd = d$Marriage.SE*2,
+  A=d$MedianAgeMarriage)
+
+m14.6 <- map2stan(
+  alist(
+    div_est ~ dnorm(mu, sigma),
+    mu <- a+bA*A+bR*mar_est[i],
+    div_obs ~ dnorm(div_est, div_sd),
+    mar_obs ~ dnorm(mar_est, mar_sd),
+    c(a, bA, bR) ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 2.5)
+  ),
+  data=dlist, 
+  start=list(div_est=dlist$div_obs, mar_est=dlist$mar_obs),
+  WAIC=FALSE, iter=5000, warmup=1000, chains=2, cores=3,
+  control=list(adapt_delta=0.99))
+
+# divergent iterations during sampling?
+
+```
+
+-----
+
+# Hard
+
+## 14H1
+
+```{r 14H1, include=FALSE}
+data("elephants")
+d <- elephants
+
+# no measurement error on age
+m14.7 <- map2stan(
+  alist(
+    MATINGS ~ dpois(lambda),
+    log(lambda) <- a+bA*AGE,
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 1)
+  ),
+  data=d, iter=1e4, chains=2, cores=2)
+
+# mesurement error of 5 years on age
+m14.8 <- map2stan(
+  alist(
+    MATINGS ~ dpois(lambda),
+    log(lambda) <- a+bA*AGE_est[i],
+    AGE ~ dnorm(AGE_est, 5),
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 1)
+  ),
+  data=d, iter=1e4, chains=2, cores=2,
+  start=list(AGE_est=d$AGE), WAIC=FALSE)
+
+# mesurement error of 10 years on age
+m14.9 <- map2stan(
+  alist(
+    MATINGS ~ dpois(lambda),
+    log(lambda) <- a+bA*AGE_est[i],
+    AGE ~ dnorm(AGE_est, 10),
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 1)
+  ),
+  data=d, iter=1e4, chains=2, cores=2,
+  start=list(AGE_est=d$AGE), WAIC=FALSE)
+
+# mesurement error of 20 years on age
+m14.10 <- map2stan(
+  alist(
+    MATINGS ~ dpois(lambda),
+    log(lambda) <- a+bA*AGE_est[i],
+    AGE ~ dnorm(AGE_est, 20),
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 1)
+  ),
+  data=d, iter=1e4, chains=2, cores=2,
+  start=list(AGE_est=d$AGE), WAIC=FALSE)
+
+# mesurement error of 30 years on age
+m14.11 <- map2stan(
+  alist(
+    MATINGS ~ dpois(lambda),
+    log(lambda) <- a+bA*AGE_est[i],
+    AGE ~ dnorm(AGE_est, 30),
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 1)
+  ),
+  data=d, iter=1e4, chains=2, cores=2,
+  start=list(AGE_est=d$AGE), WAIC=FALSE)
+```
+
+```{r 14H1-Results}
+# compare the coefficients from the models
+coeftab(m14.7, m14.8, m14.9, m14.10, m14.11)
+
+# plot the predictions of the results
+age.seq <- seq(20, 60, length.out = 41)
+
+plot(MATINGS~AGE, data=d, col=rangi2, pch=16)
+
+# m14.7
+matings.sim <- link(m14.7, data=list(AGE=age.seq))
+matings.median <- apply(matings.sim, 2, median)
+matings.PI  <- apply(matings.sim, 2, PI)
+lines(age.seq, matings.median, col="black")
+shade(matings.PI, age.seq, col=col.alpha("black", 0.4))
+
+# m14.8
+matings.sim <- link(m14.8, data=list(AGE=age.seq))
+matings.median <- apply(matings.sim, 2, median)
+matings.PI  <- apply(matings.sim, 2, PI)
+lines(age.seq, matings.median, col="red")
+shade(matings.PI, age.seq, col=col.alpha("red", 0.4))
+
+# m14.11
+matings.sim <- link(m14.11, data=list(AGE=age.seq))
+matings.median <- apply(matings.sim, 2, median)
+matings.PI  <- apply(matings.sim, 2, PI)
+lines(age.seq, matings.median, col="blue")
+shade(matings.PI, age.seq, col=col.alpha("blue", 0.4))
+```
+
+## 14H3
+
+```{r 14H3, include=FALSE}
+# simulate data
+set.seed(100)
+x <- c(rnorm(10), NA)
+y <- c(rnorm(10, x), 100)
+d <- list(x=x, y=y)
+
+# plot data for complete cases
+plot(d$x[1:10], d$y[1:10], col=rangi2, pch=16, xlab="x", ylab="y")
+
+# fit the imputation model
+m14.12 <- map2stan(
+  alist(
+    y ~ dnorm(mu, sigma),
+    mu <- a+b*x,
+    x ~ dnorm(0, 1),
+    a ~ dnorm(0, 100),
+    b ~ dnorm(0, 100),
+    sigma ~ dcauchy(0, 1)
+  ),
+  data=d, iter=1e4, warmup=2000, cores=3, chains=3,
+  control=list(adapt_delta=0.95))
+```
+
+```{r 14H3-Results}
+# inspect precis output
+precis(m14.12)
+
+# plot the posterior density distribution for b
+post <- extract.samples(m14.12)
+dens(post$b)
+
+# plot the posterior density distribution for the imputated predictor value
+dens(post$x_impute)
+```
+
